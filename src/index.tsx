@@ -1,4 +1,3 @@
-import ScrollableTabView from './ScrollableTabView';
+import ScrollableTabView, { Tab } from './ScrollableTabView';
 export default ScrollableTabView;
-export { ScrollableTabView };
-
+export { ScrollableTabView, Tab };

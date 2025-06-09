@@ -1,4 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import debounce from 'lodash.debounce';
+import get from 'lodash.get';
+import React, {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {
   Text,
   TouchableOpacity,
@@ -6,10 +16,12 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 
 type ScrollableTabViewProps = {
-  children: React.ReactNode;
+  children: ReactElement<TabType> | ReactElement<TabType>[];
   tabBarIndicatorStyle?: object;
   tabBarActiveTextColor?: string;
   tabBarInactiveTextColor?: string;
@@ -29,23 +41,32 @@ export default function ScrollableTabView({
   lazy = true,
   initialTabIndex = 1,
 }: ScrollableTabViewProps) {
-  const tabs = React.Children.toArray(children).map(child => ({
-    id: child.props.id,
-    label: child.props.label,
-    content: child.props.children,
-  }));
+  const tabs: { id: string; label: string; content: ReactNode }[] =
+    React.Children.map(children, (child: ReactElement<TabType>, index) => {
+      const id = get(child, 'props.id', index.toString());
+      const label = get(child, 'props.id', index.toString());
+      const content = get(child, 'props.children', null);
+      return {
+        id,
+        label,
+        content,
+      };
+    });
   const initTab = initialTabIndex < tabs.length ? initialTabIndex : 0;
-  const [initialTab, setInitialTab] = useState(initTab);
+  const initId = get(tabs, '[' + initTab + '].id', 'Default');
+  const [initialTab] = useState(initTab);
   const indicatorRef = useRef(new Animated.Value(0)).current;
-  const [selectedTab, setSelectedTab] = useState(tabs[initTab].id);
+  const [selectedTab, setSelectedTab] = useState(initId);
   const [screenWidth, setScreenWidth] = useState(0);
-  const [visitedTabs, setVisitedTabs] = useState(new Set([tabs[initTab].id]));
-  const [shouldRender, setShouldRender] = useState(false)
-  const scrollRef = useRef(null);
+  const [visitedTabs, setVisitedTabs] = useState(new Set([initId]));
+  const [shouldRender, setShouldRender] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    const index = tabs.findIndex(tab => tab.id === selectedTab);
-    if (screenWidth > 0) {
+  const handleTabClick = useCallback(
+    (tabId: string) => {
+      const index = tabs.findIndex((tab) => tab.id === tabId);
+      setSelectedTab(tabId);
+      setVisitedTabs((prev) => new Set(prev).add(tabId));
       if (scrollRef.current) {
         scrollRef.current.scrollTo({
           x: index * screenWidth,
@@ -53,36 +74,50 @@ export default function ScrollableTabView({
           animated: true,
         });
       }
-      setVisitedTabs(prev => new Set(prev).add(tabs[index].id));
       Animated.spring(indicatorRef, {
         toValue: index * (screenWidth / tabs.length),
         useNativeDriver: true,
       }).start();
-    }
-  }, [selectedTab, screenWidth, initialTab, scrollRef.current]);
+    },
+    [tabs, screenWidth, indicatorRef]
+  );
 
-  const momentumScroll = event => {
-    console.log('momentumscrollend');
-    const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
-    setSelectedTab(tabs[index]?.id);
+  const momentumScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (shouldRender) {
+      const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
+      if (index < tabs.length) {
+        const tabId = get(tabs, '[' + index + '].id', 'Default');
+        setSelectedTab(tabId);
+        setVisitedTabs((prev) => new Set(prev).add(tabId));
+      }
+    }
   };
 
-  const handleScroll = event => {
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     const index = Math.floor(offsetX / screenWidth);
     const position = offsetX - index * screenWidth;
     indicatorRef.setValue((position + index * screenWidth) / tabs.length);
   };
 
-  const handleInitialScroll = useCallback(() => {
-    indicatorRef.setValue((initialTab * screenWidth) / tabs.length);
-      scrollRef.current.scrollTo({
-        x: initialTab * screenWidth,
-        y: 0,
-        animated: false,
-      });
-    const t=setTimeout(()=>setShouldRender(true),200)
-  }, [screenWidth, initialTab]);
+  const handleInitialScroll = useCallback(
+    (sW: number, iT: number) => {
+      indicatorRef.setValue((iT * sW) / tabs.length);
+      if (scrollRef.current) {
+        scrollRef.current.scrollTo({
+          x: iT * sW,
+          y: 0,
+          animated: false,
+        });
+        setTimeout(() => setShouldRender(true), 50);
+      }
+    },
+    [tabs, indicatorRef]
+  );
+  const debounceInitialFunction = useMemo(
+    () => debounce(handleInitialScroll, 50),
+    [handleInitialScroll]
+  );
 
   const tabStyle = Object.assign({}, styles.tabBar, tabBarContainerStyle);
   const tabTextStyle = Object.assign({}, styles.tabText, tabBarTextStyle);
@@ -90,39 +125,39 @@ export default function ScrollableTabView({
     {},
     styles.activeTabText,
     tabBarTextStyle,
-    { color: tabBarActiveTextColor },
+    { color: tabBarActiveTextColor }
   );
   const activeTab = Object.assign({}, styles.activeTab);
   const inactiveTab = Object.assign(
     {},
     styles.tabButton,
-    tabBarInactiveTextColor,
+    tabBarInactiveTextColor
   );
   const indicatorStyle = Object.assign(
     {},
     styles.indicator,
-    tabBarIndicatorStyle,
+    tabBarIndicatorStyle
   );
   //make the content lazy
 
   return (
     <View
       style={[styles.container]}
-      onLayout={event => {
+      onLayout={(event) => {
         const { width } = event.nativeEvent.layout;
         setScreenWidth(width);
-        indicatorRef.setValue(initialTab * (width / tabs.length));
-      }}>
+      }}
+    >
       <View style={tabStyle}>
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <TouchableOpacity
             key={tab.id}
             style={[inactiveTab, selectedTab === tab.id && activeTab]}
-            onPress={() => setSelectedTab(tab.id)}>
+            onPress={() => handleTabClick(tab.id)}
+          >
             <Text
-              style={
-                selectedTab === tab.id ? activeTabTextStyle : tabTextStyle
-              }>
+              style={selectedTab === tab.id ? activeTabTextStyle : tabTextStyle}
+            >
               {tab.label}
             </Text>
           </TouchableOpacity>
@@ -139,27 +174,28 @@ export default function ScrollableTabView({
       </View>
       <ScrollView
         ref={scrollRef}
-        onLayout={handleInitialScroll}
+        onLayout={(event) => {
+          const { width } = event.nativeEvent.layout;
+
+          debounceInitialFunction(width, initialTab);
+        }}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={momentumScroll}
         onScroll={handleScroll}
-        contentContainerStyle={styles.scrollContainer}>
+        contentContainerStyle={styles.scrollContainer}
+      >
         {tabs.map((tab, index) => {
           if (shouldRender && (!lazy || visitedTabs.has(tab.id))) {
-            console.log('should of loaded');
             return (
-              <View key={tab.id} style={{ width: screenWidth, flex: 1 }}>
+              <View key={tab.id} style={[styles.tab, { width: screenWidth }]}>
                 {tab.content}
               </View>
             );
           }
           return (
-            <View
-              key={index}
-              style={{ backgroundColor: 'transparent', flex: 1, width: screenWidth }}
-            />
+            <View key={index} style={[styles.tab, { width: screenWidth }]} />
           );
         })}
       </ScrollView>
@@ -167,7 +203,9 @@ export default function ScrollableTabView({
   );
 }
 
-export function Tab({ id, label, children }) {
+export type TabType = (props: TabProps) => JSX.Element;
+export type TabProps = { id: string; label: string; children: ReactNode };
+export function Tab(_: TabProps) {
   return null; // purely structural
 }
 
@@ -194,7 +232,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    padding: 20,
   },
   contentText: {
     fontSize: 16,
@@ -211,5 +248,9 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
+  },
+  tab: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
 });
