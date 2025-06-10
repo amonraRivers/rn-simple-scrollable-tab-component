@@ -16,6 +16,6 @@ export type TabProps = {
     label: string;
     children: ReactNode;
 };
-export declare function Tab(_: TabProps): null;
+export declare function Tab(props: TabProps): JSX.Element;
 export {};
 //# sourceMappingURL=ScrollableTabView.d.ts.map
