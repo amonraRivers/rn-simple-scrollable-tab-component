@@ -44,7 +44,7 @@ export default function ScrollableTabView({
   const tabs: { id: string; label: string; content: ReactNode }[] =
     React.Children.map(children, (child: ReactElement<TabType>, index) => {
       const id = get(child, 'props.id', index.toString());
-      const label = get(child, 'props.id', index.toString());
+      const label = get(child, 'props.label', index.toString());
       const content = get(child, 'props.children', null);
       return {
         id,
