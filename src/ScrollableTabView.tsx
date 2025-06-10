@@ -205,8 +205,8 @@ export default function ScrollableTabView({
 
 export type TabType = (props: TabProps) => JSX.Element;
 export type TabProps = { id: string; label: string; children: ReactNode };
-export function Tab(_: TabProps) {
-  return null; // purely structural
+export function Tab(props: TabProps) {
+  return <View style={styles.contentContainer}>{props.children}</View>; // purely structural
 }
 
 const styles = StyleSheet.create({
